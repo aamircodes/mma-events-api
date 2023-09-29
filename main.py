@@ -1,16 +1,11 @@
-# This is a sample Python script.
+import requests
+from bs4 import BeautifulSoup
 
-# Press ⌃R to execute it or replace it with your code.
-# Press Double ⇧ to search everywhere for classes, files, tool windows, actions, and settings.
+URL = "https://www.tapology.com/fightcenter/events/101866-ufc-fight-night"
+page = requests.get(URL)
 
-
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press ⌘F8 to toggle the breakpoint.
-
-
-# Press the green button in the gutter to run the script.
+soup = BeautifulSoup(page.content, "html.parser")
+results = soup.find_all("div", class_="fightCardBoutNumber")
 if __name__ == '__main__':
-    print_hi('PyCharm')
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+    for result in results:
+        print(result)
