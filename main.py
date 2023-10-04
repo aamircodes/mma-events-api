@@ -1,4 +1,5 @@
 from flask import Flask, jsonify
+from flask_caching import Cache
 from selenium import webdriver
 from bs4 import BeautifulSoup
 from selenium.webdriver.chrome.options import Options
@@ -10,8 +11,13 @@ MAX_MAJOR_ORGS = 10
 
 app = Flask(__name__)
 
+# setup cache config
+app.config['CACHE_TYPE'] = 'simple'
+cache = Cache(app)
 
 # utility function
+
+
 def get_browser():
     options = Options()
     options.add_argument('--headless')
@@ -69,6 +75,7 @@ def extract_fight_details(el):
     }
 
 
+@cache.memoize(timeout=86400)
 def scrape():
     browser = get_browser()
     browser.get(f"{BASE_URL}/fightcenter?group=major&schedule=upcoming")
