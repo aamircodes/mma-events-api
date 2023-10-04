@@ -1,12 +1,17 @@
-import json
+from flask import Flask, jsonify
 from selenium import webdriver
 from bs4 import BeautifulSoup
 from selenium.webdriver.chrome.options import Options
 
+
 BASE_URL = 'https://www.tapology.com'
 MAJOR_ORGS = ['UFC', 'PFL', 'BELLATOR', 'ONE', 'RIZIN']
+MAX_MAJOR_ORGS = 10
+
+app = Flask(__name__)
 
 
+# utility function
 def get_browser():
     options = Options()
     options.add_argument('--headless')
@@ -14,6 +19,10 @@ def get_browser():
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     return webdriver.Chrome(options=options)
+
+
+def filter_major_orgs(events):
+    return [event for event in events if any(org in event["title"].upper() for org in MAJOR_ORGS)][:MAX_MAJOR_ORGS]
 
 
 def extract_event_details(el):
@@ -26,10 +35,6 @@ def extract_event_details(el):
     link = BASE_URL + title_element['href'] if title_element else None
 
     return {"title": title, "date": date, "link": link}
-
-
-def filter_major_orgs(events):
-    return [event for event in events if any(org in event["title"].upper() for org in MAJOR_ORGS)][:10]
 
 
 def extract_fight_details(el):
@@ -83,8 +88,11 @@ def scrape():
     return [event for event in events if len(event["fights"]) > 4]
 
 
-if __name__ == "__main__":
-    scraped_data = scrape()
+@app.route('/get_fight_data', methods=['GET'])
+def get_fight_data():
+    data = scrape()
+    return jsonify(data)
 
-    with open('output.json', 'w') as f:
-        json.dump(scraped_data, f, indent=4)
+
+if __name__ == "__main__":
+    app.run(debug=True)
