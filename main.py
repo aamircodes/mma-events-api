@@ -16,13 +16,22 @@ MAJOR_ORGS = ['UFC', 'PFL', 'BELLATOR', 'ONE', 'RIZIN']
 MAX_MAJOR_ORGS = 10
 
 
-# Create a new client and connect to the server
-client = MongoClient(uri, tls=True, tlsAllowInvalidCertificates=True)
-db = client['fight_data_db']
-collection = db['major_org_events']
+def connect_to_db():
+    try:
+        client = MongoClient(uri, tls=True, tlsAllowInvalidCertificates=True)
+        return client['fight_data_db']
+    except:
+        return None
 
 
-# utility function
+def store_data(data):
+    db = connect_to_db()
+    if db is not None:
+        collection = db['major_org_events']
+        collection.delete_many({})  # remove existing data
+        collection.insert_many(data)
+
+
 def get_browser():
     options = Options()
     options.add_argument('--headless')
@@ -85,34 +94,41 @@ def scrape():
     try:
         browser.get(f"{BASE_URL}/fightcenter?group=major&schedule=upcoming")
         soup = BeautifulSoup(browser.page_source, 'lxml')
+
         events = [extract_event_details(el)
                   for el in soup.select('.promotion')]
         events = filter_major_orgs(events)
+
         for event in events:
             browser.get(event['link'])
             soup = BeautifulSoup(browser.page_source, 'lxml')
             event["fights"] = [extract_fight_details(
                 el) for el in soup.select('li.fightCard:not(.picks)')]
         data = [event for event in events if len(event["fights"]) > 4]
-        collection.delete_many({})  # remove existing data
-        collection.insert_many(data)
-        return data
+        store_data(data)
+        return True
     except Exception as e:
         print(f"Error occurred: {e}")
+        return False
     finally:
         browser.quit()
 
 
 @app.route('/scrape', methods=['POST'])
 def run_scrape():
-    scrape()
-    return jsonify({"status": "success"})
+    success = scrape()
+    return jsonify({"status": "success" if success else "failure"})
 
 
 @app.route('/', methods=['GET'])
 def get_fight_data():
-    data = list(collection.find({}, {'_id': 0}))
-    return jsonify(data)
+    db = connect_to_db()
+    if db is not None:
+        collection = db['major_org_events']
+        data = list(collection.find({}, {'_id': 0}))
+        return jsonify(data)
+    else:
+        return jsonify({"error": "Failed to connect to database"}), 500
 
 
 if __name__ == "__main__":
