@@ -41,8 +41,9 @@ def get_browser():
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--no-sandbox")
-    driver = webdriver.Chrome(executable_path=os.environ.get(
-        "CHROMEDRIVER_PATH"), options=chrome_options)
+    # driver = webdriver.Chrome(executable_path=os.environ.get(
+    #     "CHROMEDRIVER_PATH"), options=chrome_options)
+    driver = webdriver.Chrome(options=chrome_options)
     print("Browser initialized successfully.")
     return driver
 
@@ -147,5 +148,6 @@ def get_fight_data():
 
 if __name__ == "__main__":
     print("Starting the application...")
-    app.debug = True
-    app.run()
+    # Bind to PORT if defined, otherwise default to 5000.
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
