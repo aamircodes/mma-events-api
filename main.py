@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from pymongo import MongoClient
 from selenium import webdriver
 from bs4 import BeautifulSoup
@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 uri = os.getenv('MONGODB_URI')
+SECRET_KEY = os.getenv('SECRET_KEY')
 
 app = Flask(__name__)
 
@@ -126,7 +127,11 @@ def scrape():
 
 @app.route('/scrape', methods=['POST'])
 def run_scrape():
-    print("Received a request to scrape.")
+    request_key_value = request.json.get('data', None)
+    if request_key_value != SECRET_KEY:
+        return jsonify({"error": "Unauthorised"}), 403
+
+    print("Received a valid request to scrape.")
     success = scrape()
     print(f"Scraping {'succeeded' if success else 'failed'}.")
     return jsonify({"status": "success" if success else "failure"})
