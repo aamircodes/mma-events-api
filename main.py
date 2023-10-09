@@ -1,23 +1,28 @@
 from flask import Flask, jsonify
-from flask_caching import Cache
+from pymongo import MongoClient
 from selenium import webdriver
 from bs4 import BeautifulSoup
 from selenium.webdriver.chrome.options import Options
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
+uri = os.getenv('MONGODB_URI')
+
+app = Flask(__name__)
 
 BASE_URL = 'https://www.tapology.com'
 MAJOR_ORGS = ['UFC', 'PFL', 'BELLATOR', 'ONE', 'RIZIN']
 MAX_MAJOR_ORGS = 10
 
-app = Flask(__name__)
 
-# setup cache config
-app.config['CACHE_TYPE'] = 'simple'
-cache = Cache(app)
+# Create a new client and connect to the server
+client = MongoClient(uri, tls=True, tlsAllowInvalidCertificates=True)
+db = client['fight_data_db']
+collection = db['major_org_events']
+
 
 # utility function
-
-
 def get_browser():
     options = Options()
     options.add_argument('--headless')
@@ -75,31 +80,41 @@ def extract_fight_details(el):
     }
 
 
-@cache.memoize(timeout=86400)
 def scrape():
     browser = get_browser()
-    browser.get(f"{BASE_URL}/fightcenter?group=major&schedule=upcoming")
-    soup = BeautifulSoup(browser.page_source, 'lxml')
-
-    events = [extract_event_details(el) for el in soup.select('.promotion')]
-    events = filter_major_orgs(events)
-
-    for event in events:
-        browser.get(event['link'])
+    try:
+        browser.get(f"{BASE_URL}/fightcenter?group=major&schedule=upcoming")
         soup = BeautifulSoup(browser.page_source, 'lxml')
-        event["fights"] = [extract_fight_details(
-            el) for el in soup.select('li.fightCard:not(.picks)')]
+        events = [extract_event_details(el)
+                  for el in soup.select('.promotion')]
+        events = filter_major_orgs(events)
+        for event in events:
+            browser.get(event['link'])
+            soup = BeautifulSoup(browser.page_source, 'lxml')
+            event["fights"] = [extract_fight_details(
+                el) for el in soup.select('li.fightCard:not(.picks)')]
+        data = [event for event in events if len(event["fights"]) > 4]
+        collection.delete_many({})  # remove existing data
+        collection.insert_many(data)
+        return data
+    except Exception as e:
+        print(f"Error occurred: {e}")
+    finally:
+        browser.quit()
 
-    browser.quit()
 
-    return [event for event in events if len(event["fights"]) > 4]
+@app.route('/scrape', methods=['POST'])
+def run_scrape():
+    scrape()
+    return jsonify({"status": "success"})
 
 
-@app.route('/get_fight_data', methods=['GET'])
+@app.route('/', methods=['GET'])
 def get_fight_data():
-    data = scrape()
+    data = list(collection.find({}, {'_id': 0}))
     return jsonify(data)
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.debug = True
+    app.run()
