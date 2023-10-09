@@ -17,9 +17,12 @@ MAX_MAJOR_ORGS = 10
 
 def connect_to_db():
     try:
+        print("Attempting to connect to the database...")
         client = MongoClient(uri, tls=True, tlsAllowInvalidCertificates=True)
+        print("Connected to the database successfully.")
         return client['fight_data_db']
-    except:
+    except Exception as e:
+        print(f"Error connecting to the database: {e}")
         return None
 
 
@@ -32,12 +35,7 @@ def store_data(data):
 
 
 def get_browser():
-    # options = Options()
-    # options.add_argument('--headless')
-    # options.add_argument('--disable-gpu')
-    # options.add_argument('--no-sandbox')
-    # options.add_argument('--disable-dev-shm-usage')
-    # options.binary_location = os.environ.get("GOOGLE_CHROME_BIN")
+    print("Initializing the browser...")
     chrome_options = webdriver.ChromeOptions()
     chrome_options.binary_location = os.environ.get("GOOGLE_CHROME_BIN")
     chrome_options.add_argument("--headless")
@@ -45,6 +43,7 @@ def get_browser():
     chrome_options.add_argument("--no-sandbox")
     driver = webdriver.Chrome(executable_path=os.environ.get(
         "CHROMEDRIVER_PATH"), options=chrome_options)
+    print("Browser initialized successfully.")
     return driver
 
 
@@ -99,36 +98,44 @@ def extract_fight_details(el):
 def scrape():
     browser = get_browser()
     try:
+        print("Starting the scraping process...")
         browser.get(f"{BASE_URL}/fightcenter?group=major&schedule=upcoming")
         soup = BeautifulSoup(browser.page_source, 'lxml')
 
         events = [extract_event_details(el)
                   for el in soup.select('.promotion')]
         events = filter_major_orgs(events)
+        print(f"Found {len(events)} major events.")
 
         for event in events:
+            print(f"Scraping details for {event['title']}...")
             browser.get(event['link'])
             soup = BeautifulSoup(browser.page_source, 'lxml')
             event["fights"] = [extract_fight_details(
                 el) for el in soup.select('li.fightCard:not(.picks)')]
         data = [event for event in events if len(event["fights"]) > 4]
         store_data(data)
+        print("Scraping process completed successfully.")
         return True
     except Exception as e:
-        print(f"Error occurred: {e}")
+        print(f"Error occurred during scraping: {e}")
         return False
     finally:
+        print("Closing the browser.")
         browser.quit()
 
 
 @app.route('/scrape', methods=['POST'])
 def run_scrape():
+    print("Received a request to scrape.")
     success = scrape()
+    print(f"Scraping {'succeeded' if success else 'failed'}.")
     return jsonify({"status": "success" if success else "failure"})
 
 
 @app.route('/', methods=['GET'])
 def get_fight_data():
+    print("Received a request for fight data.")
     db = connect_to_db()
     if db is not None:
         collection = db['major_org_events']
@@ -139,5 +146,6 @@ def get_fight_data():
 
 
 if __name__ == "__main__":
+    print("Starting the application...")
     app.debug = True
     app.run()
